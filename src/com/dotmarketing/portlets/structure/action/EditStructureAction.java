@@ -4,6 +4,7 @@ import static com.dotmarketing.business.PermissionAPI.PERMISSION_PUBLISH;
 
 import java.net.URLDecoder;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -22,6 +23,7 @@ import com.dotmarketing.beans.Identifier;
 import com.dotmarketing.business.APILocator;
 import com.dotmarketing.business.DotStateException;
 import com.dotmarketing.business.PermissionAPI;
+import com.dotmarketing.business.PublishStateException;
 import com.dotmarketing.cache.StructureCache;
 import com.dotmarketing.db.HibernateUtil;
 import com.dotmarketing.exception.DotDataException;
@@ -361,7 +363,26 @@ public class EditStructureAction extends DotPortletAction {
 					
 					expireChanged = true;
 			}
-
+			if(!newStructure && (publishChanged || expireChanged)){
+				 List<Contentlet> results = conAPI.findByStructure(structure, user, true, 0, 0);
+					  for (Contentlet con : results) {
+						if( UtilMethods.isSet(structureForm.getExpireDateVar())){
+							Date pub = (Date)con.getMap().get(structureForm.getPublishDateVar());
+							Date exp = (Date) con.getMap().get(structureForm.getExpireDateVar());
+								
+							if(UtilMethods.isSet(pub) && UtilMethods.isSet(exp)){	
+								if(exp.before(new Date())){
+									throw new PublishStateException("'"+con.getTitle()+"'" + LanguageUtil.get(user, "found-expired-content-please-check-before-continue"));
+								}else if(exp.before(pub)){
+									throw new PublishStateException("'"+con.getTitle()+"'" + LanguageUtil.get(user, "expire-date-should-not-be-less-than-Publish-date-please-check-before-continue"));
+								}
+								else if(con.isLive()  && pub.after(new Date()) && exp.after(new Date())){
+									conAPI.unpublish(con, user, true);  
+								}
+							} 
+						}
+					  }
+				}
 			BeanUtils.copyProperties(structure, structureForm);
 
 			// if htmlpage doesn't exist page id should be an identifier. Should
